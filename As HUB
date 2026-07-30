@@ -1,0 +1,423 @@
+-- สคริปต์เมนู 6 ปุ่ม (ฟังก์ชันที่ 6 ปรับความเร็วเป็น 0.3 วินาที)
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- ลบเมนูเก่าและปุ่ม G เก่าทิ้งก่อน (ถ้ามี)
+if playerGui:FindFirstChild("MyTataMenu") then
+    playerGui.MyTataMenu:Destroy()
+end
+if playerGui:FindFirstChild("MyTataToggleBtn") then
+    playerGui.MyTataToggleBtn:Destroy()
+end
+
+-- ระบบจัดการไฟล์ (บันทึกข้อมูลถาวร)
+local HttpService = game:GetService("HttpService")
+local HISTORY_FILE = "MyTata_History.json"
+local STORAGE_FILE = "MyTata_Storage.json"
+
+local historyList = {}
+local savedScriptsList = {}
+
+pcall(function()
+    if readfile and isfile and isfile(HISTORY_FILE) then
+        historyList = HttpService:JSONDecode(readfile(HISTORY_FILE))
+    end
+end)
+
+pcall(function()
+    if readfile and isfile and isfile(STORAGE_FILE) then
+        savedScriptsList = HttpService:JSONDecode(readfile(STORAGE_FILE))
+    end
+end)
+
+local function SaveData()
+    pcall(function()
+        if writefile then
+            writefile(HISTORY_FILE, HttpService:JSONEncode(historyList))
+            writefile(STORAGE_FILE, HttpService:JSONEncode(savedScriptsList))
+        end
+    end)
+end
+
+-- สร้าง ScreenGui สำหรับหน้าต่างเมนูหลัก
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MyTataMenu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = playerGui
+
+-- สร้าง Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Parent = ScreenGui
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+MainFrame.BorderSizePixel = 0
+MainFrame.Position = UDim2.new(0.5, -140, 0.5, -230)
+MainFrame.Size = UDim2.new(0, 280, 0, 460)
+MainFrame.Active = true
+MainFrame.Draggable = true
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 12)
+UICorner.Parent = MainFrame
+
+-- ช่องพิมพ์หรือวางโค้ด (TextBox)
+local CodeBox = Instance.new("TextBox")
+CodeBox.Name = "CodeBox"
+CodeBox.Parent = MainFrame
+CodeBox.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+CodeBox.BorderSizePixel = 0
+CodeBox.Position = UDim2.new(0, 10, 0, 10)
+CodeBox.Size = UDim2.new(1, -60, 0, 45)
+CodeBox.ClearTextOnFocus = false
+CodeBox.Font = Enum.Font.SourceSansBold
+CodeBox.PlaceholderText = "วางโค้ดที่นี่..."
+CodeBox.Text = ""
+CodeBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+CodeBox.PlaceholderColor3 = Color3.fromRGB(150, 150, 150)
+CodeBox.TextSize = 16
+CodeBox.TextXAlignment = Enum.TextXAlignment.Left
+
+local HeaderCorner = UICorner:Clone()
+HeaderCorner.Parent = CodeBox
+
+local TextPadding = Instance.new("UIPadding")
+TextPadding.PaddingLeft = UDim.new(0, 15)
+TextPadding.Parent = CodeBox
+
+-- ปุ่มรีเซต/ล้างข้อความในกล่อง (ปุ่ม C)
+local ResetTextBtn = Instance.new("TextButton")
+ResetTextBtn.Name = "ResetTextBtn"
+ResetTextBtn.Parent = MainFrame
+ResetTextBtn.BackgroundColor3 = Color3.fromRGB(178, 34, 34)
+ResetTextBtn.BorderSizePixel = 0
+ResetTextBtn.Position = UDim2.new(1, -45, 0, 10)
+ResetTextBtn.Size = UDim2.new(0, 35, 0, 45)
+ResetTextBtn.Font = Enum.Font.SourceSansBold
+ResetTextBtn.Text = "C"
+ResetTextBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResetTextBtn.TextSize = 16
+
+local ResetCorner = UICorner:Clone()
+ResetCorner.Parent = ResetTextBtn
+
+ResetTextBtn.MouseButton1Click:Connect(function()
+    CodeBox.Text = ""
+end)
+
+-- คอนเทนเนอร์ปุ่มหลัก
+local ButtonContainer = Instance.new("Frame")
+ButtonContainer.Parent = MainFrame
+ButtonContainer.BackgroundTransparency = 1
+ButtonContainer.Position = UDim2.new(0, 10, 0, 65)
+ButtonContainer.Size = UDim2.new(1, -20, 1, -75)
+
+local UIListLayout = Instance.new("UIListLayout")
+UIListLayout.Parent = ButtonContainer
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.Padding = UDim.new(0, 8)
+
+-- ฟังก์ชันสร้างปุ่ม 6 ปุ่ม
+local function CreateButton(order, text, color)
+    local btn = Instance.new("TextButton")
+    btn.Parent = ButtonContainer
+    btn.LayoutOrder = order
+    btn.BackgroundColor3 = color
+    btn.BorderSizePixel = 0
+    btn.Size = UDim2.new(1, 0, 0, 48)
+    
+    local btnCorner = UICorner:Clone()
+    btnCorner.Parent = btn
+    
+    btn.Font = Enum.Font.SourceSansBold
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.TextSize = 16
+    return btn
+end
+
+-- ----------------------------------------------------
+-- หน้าต่าง "ประวัติบันทึก"
+-- ----------------------------------------------------
+local HistoryFrame = Instance.new("ScrollingFrame")
+HistoryFrame.Name = "HistoryFrame"
+HistoryFrame.Parent = MainFrame
+HistoryFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+HistoryFrame.BorderSizePixel = 0
+HistoryFrame.Position = UDim2.new(0, 0, 0, 65)
+HistoryFrame.Size = UDim2.new(1, 0, 1, -65)
+HistoryFrame.Visible = false
+HistoryFrame.CanvasSize = UDim2.new(0, 0, 2, 0)
+HistoryFrame.ScrollBarThickness = 6
+
+local HistoryLayout = Instance.new("UIListLayout")
+HistoryLayout.Parent = HistoryFrame
+HistoryLayout.SortOrder = Enum.SortOrder.LayoutOrder
+HistoryLayout.Padding = UDim.new(0, 5)
+
+-- ปุ่มปิด (X) หน้าประวัติ
+local CloseHistoryBtn = Instance.new("TextButton")
+CloseHistoryBtn.Parent = HistoryFrame
+CloseHistoryBtn.Size = UDim2.new(1, 0, 0, 35)
+CloseHistoryBtn.BackgroundColor3 = Color3.fromRGB(178, 34, 34)
+CloseHistoryBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseHistoryBtn.TextSize = 14
+CloseHistoryBtn.Font = Enum.Font.SourceSansBold
+CloseHistoryBtn.Text = "X ปิดหน้าต่างนี้"
+
+-- ----------------------------------------------------
+-- หน้าต่าง "คลังเก็บโค้ด"
+-- ----------------------------------------------------
+local StorageFrame = Instance.new("ScrollingFrame")
+StorageFrame.Name = "StorageFrame"
+StorageFrame.Parent = MainFrame
+StorageFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+StorageFrame.BorderSizePixel = 0
+StorageFrame.Position = UDim2.new(0, 0, 0, 65)
+StorageFrame.Size = UDim2.new(1, 0, 1, -65)
+StorageFrame.Visible = false
+StorageFrame.CanvasSize = UDim2.new(0, 0, 2, 0)
+StorageFrame.ScrollBarThickness = 6
+
+local StorageLayout = Instance.new("UIListLayout")
+StorageLayout.Parent = StorageFrame
+StorageLayout.SortOrder = Enum.SortOrder.LayoutOrder
+StorageLayout.Padding = UDim.new(0, 5)
+
+-- ปุ่มปิด (X) หน้าคลังเก็บ
+local CloseStorageBtn = Instance.new("TextButton")
+CloseStorageBtn.Parent = StorageFrame
+CloseStorageBtn.Size = UDim2.new(1, 0, 0, 35)
+CloseStorageBtn.BackgroundColor3 = Color3.fromRGB(178, 34, 34)
+CloseStorageBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseStorageBtn.TextSize = 14
+CloseStorageBtn.Font = Enum.Font.SourceSansBold
+CloseStorageBtn.Text = "X ปิดหน้าต่างนี้"
+
+-- ประกาศฟังก์ชันรีเฟรชล่วงหน้า
+local RefreshHistoryUI, RefreshStorageUI
+
+-- ฟังก์ชันสร้างรายการประวัติ
+RefreshHistoryUI = function()
+    for _, child in ipairs(HistoryFrame:GetChildren()) do
+        if child:IsA("Frame") or (child:IsA("TextButton") and child ~= CloseHistoryBtn) then
+            child:Destroy()
+        end
+    end
+    for index, codeContent in ipairs(historyList) do
+        local rowFrame = Instance.new("Frame")
+        rowFrame.Parent = HistoryFrame
+        rowFrame.Size = UDim2.new(1, 0, 0, 40)
+        rowFrame.BackgroundTransparency = 1
+
+        local itemBtn = Instance.new("TextButton")
+        itemBtn.Parent = rowFrame
+        itemBtn.Size = UDim2.new(1, -45, 1, 0)
+        itemBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        itemBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        itemBtn.TextSize = 13
+        itemBtn.Font = Enum.Font.SourceSansBold
+        
+        local previewText = codeContent
+        if #previewText > 24 then
+            previewText = string.sub(previewText, 1, 24) .."..."
+        end
+        itemBtn.Text = "ประวัติที่ " .. index .. ": " .. previewText
+        
+        itemBtn.MouseButton1Click:Connect(function()
+            CodeBox.Text = codeContent
+            HistoryFrame.Visible = false
+        end)
+
+        local deleteBtn = Instance.new("TextButton")
+        deleteBtn.Parent = rowFrame
+        deleteBtn.Position = UDim2.new(1, -40, 0, 0)
+        deleteBtn.Size = UDim2.new(0, 40, 1, 0)
+        deleteBtn.BackgroundColor3 = Color3.fromRGB(178, 34, 34)
+        deleteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        deleteBtn.TextSize = 14
+        deleteBtn.Font = Enum.Font.SourceSansBold
+        deleteBtn.Text = "X"
+
+        deleteBtn.MouseButton1Click:Connect(function()
+            table.remove(historyList, index)
+            SaveData()
+            RefreshHistoryUI()
+        end)
+    end
+end
+
+-- ฟังก์ชันสร้างรายการคลังเก็บ
+RefreshStorageUI = function()
+    for _, child in ipairs(StorageFrame:GetChildren()) do
+        if child:IsA("Frame") or (child:IsA("TextButton") and child ~= CloseStorageBtn) then
+            child:Destroy()
+        end
+    end
+    for index, codeContent in ipairs(savedScriptsList) do
+        local rowFrame = Instance.new("Frame")
+        rowFrame.Parent = StorageFrame
+        rowFrame.Size = UDim2.new(1, 0, 0, 40)
+        rowFrame.BackgroundTransparency = 1
+
+        local itemBtn = Instance.new("TextButton")
+        itemBtn.Parent = rowFrame
+        itemBtn.Size = UDim2.new(1, -45, 1, 0)
+        itemBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        itemBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        itemBtn.TextSize = 13
+        itemBtn.Font = Enum.Font.SourceSansBold
+        
+        local previewText = codeContent
+        if #previewText > 24 then
+            previewText = string.sub(previewText, 1, 24) .."..."
+        end
+        itemBtn.Text = "คลังเก็บที่ " .. index .. ": " .. previewText
+        
+        itemBtn.MouseButton1Click:Connect(function()
+            CodeBox.Text = codeContent
+            StorageFrame.Visible = false
+        end)
+
+        local deleteBtn = Instance.new("TextButton")
+        deleteBtn.Parent = rowFrame
+        deleteBtn.Position = UDim2.new(1, -40, 0, 0)
+        deleteBtn.Size = UDim2.new(0, 40, 1, 0)
+        deleteBtn.BackgroundColor3 = Color3.fromRGB(178, 34, 34)
+        deleteBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        deleteBtn.TextSize = 14
+        deleteBtn.Font = Enum.Font.SourceSansBold
+        deleteBtn.Text = "X"
+
+        deleteBtn.MouseButton1Click:Connect(function()
+            table.remove(savedScriptsList, index)
+            SaveData()
+            RefreshStorageUI()
+        end)
+    end
+end
+
+CloseHistoryBtn.MouseButton1Click:Connect(function()
+    HistoryFrame.Visible = false
+end)
+
+CloseStorageBtn.MouseButton1Click:Connect(function()
+    StorageFrame.Visible = false
+end)
+
+-- ----------------------------------------------------
+-- สร้างปุ่มหลักทั้ง 6 ปุ่ม
+-- ----------------------------------------------------
+
+-- 1. คัดลอกโค้ด
+local b1 = CreateButton(1, "1. คัดลอกโค้ด", Color3.fromRGB(0, 102, 204))
+b1.MouseButton1Click:Connect(function()
+    if setclipboard then
+        setclipboard(CodeBox.Text)
+        print("คัดลอกโค้ดสำเร็จ!")
+    end
+end)
+
+-- 2. รันโค้ด 1 ครั้ง
+local b2 = CreateButton(2, "2. รันโค้ด 1 ครั้ง", Color3.fromRGB(46, 139, 87))
+b2.MouseButton1Click:Connect(function()
+    pcall(function()
+        loadstring(CodeBox.Text)()
+    end)
+end)
+
+-- 3. บันทึกโค้ด
+local b3 = CreateButton(3, "3. บันทึกโค้ด", Color3.fromRGB(80, 80, 80))
+b3.MouseButton1Click:Connect(function()
+    local codeText = CodeBox.Text
+    if codeText ~= "" and codeText ~= "วางโค้ดที่นี่..." then
+        table.insert(historyList, codeText)
+        table.insert(savedScriptsList, codeText)
+        SaveData()
+        b3.Text = "3. บันทึกสำเร็จ!"
+        task.wait(1)
+        b3.Text = "3. บันทึกโค้ด"
+    else
+        b3.Text = "3. ช่องว่างเปล่า!"
+        task.wait(1)
+        b3.Text = "3. บันทึกโค้ด"
+    end
+end)
+
+-- 4. ประวัติบันทึก
+local b4 = CreateButton(4, "4. ประวัติบันทึก", Color3.fromRGB(138, 43, 226))
+b4.MouseButton1Click:Connect(function()
+    StorageFrame.Visible = false
+    HistoryFrame.Visible = not HistoryFrame.Visible
+    if HistoryFrame.Visible then
+        RefreshHistoryUI()
+    end
+end)
+
+-- 5. คลังเก็บโค้ด
+local b5 = CreateButton(5, "5. คลังเก็บโค้ด", Color3.fromRGB(230, 126, 34))
+b5.MouseButton1Click:Connect(function()
+    HistoryFrame.Visible = false
+    StorageFrame.Visible = not StorageFrame.Visible
+    if StorageFrame.Visible then
+        RefreshStorageUI()
+    end
+end)
+
+-- 6. รันรัวๆ ความเร็ว 0.3 วินาที: OFF/ON
+local b6 = CreateButton(6, "6. รันรัวๆ: OFF", Color3.fromRGB(178, 34, 34))
+local isFastRunning = false
+local loopTask
+
+b6.MouseButton1Click:Connect(function()
+    isFastRunning = not isFastRunning
+    if isFastRunning then
+        b6.Text = "6. รันรัวๆ: ON"
+        b6.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+        loopTask = task.spawn(function()
+            while isFastRunning do
+                pcall(function()
+                    loadstring(CodeBox.Text)()
+                end)
+                task.wait(0.3) -- ความเร็ว 0.3 วินาที
+            end
+        end)
+    else
+        b6.Text = "6. รันรัวๆ: OFF"
+        b6.BackgroundColor3 = Color3.fromRGB(178, 34, 34)
+        if loopTask then
+            task.cancel(loopTask)
+        end
+    end
+end)
+
+-- ----------------------------------------------------
+-- ปุ่มตัว G สีเขียว สำหรับซ่อน/เปิด เมนูทั้งหมด
+-- ----------------------------------------------------
+local ToggleGui = Instance.new("ScreenGui")
+ToggleGui.Name = "MyTataToggleBtn"
+ToggleGui.ResetOnSpawn = false
+ToggleGui.Parent = playerGui
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleG"
+ToggleButton.Parent = ToggleGui
+ToggleButton.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+ToggleButton.Position = UDim2.new(0, 20, 0.4, 0)
+ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+ToggleButton.Font = Enum.Font.SourceSansBold
+ToggleButton.Text = "G"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 24
+ToggleButton.Active = true
+ToggleButton.Draggable = true
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleButton
+
+local isOpen = true
+ToggleButton.MouseButton1Click:Connect(function()
+    isOpen = not isOpen
+    MainFrame.Visible = isOpen
+end)
