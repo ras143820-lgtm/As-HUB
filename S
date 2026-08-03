@@ -1,0 +1,42 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- ค่าปรับแต่งเบื้องต้น
+local FOV = 120
+local FOV_OffsetY = -55
+local AimbotEnabled = true
+
+-- สร้าง GUI ง่ายๆ ป้องกัน Error
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SimpleVagrant"
+pcall(function()
+    ScreenGui.Parent = CoreGui
+end)
+if not ScreenGui.Parent then
+    ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- สร้างวง FOV
+local FOVFrame = Instance.new("Frame", ScreenGui)
+FOVFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+FOVFrame.BackgroundTransparency = 1
+FOVFrame.Size = UDim2.new(0, FOV * 2, 0, FOV * 2)
+
+local Stroke = Instance.new("UIStroke", FOVFrame)
+Stroke.Thickness = 1.5
+Stroke.Color = Color3.fromRGB(255, 255, 255)
+
+local Corner = Instance.new("UICorner", FOVFrame)
+Corner.CornerRadius = UDim.new(1, 0)
+
+-- ลูปการทำงานแบบเบาที่สุด
+RunService.RenderStepped:Connect(function()
+    FOVFrame.Position = UDim2.new(0, Camera.ViewportSize.X / 2, 0, (Camera.ViewportSize.Y / 2) + FOV_OffsetY)
+    FOVFrame.Visible = AimbotEnabled
+    
+    -- เปลี่ยนสีวงเรนโบว์
+    Stroke.Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+end)
