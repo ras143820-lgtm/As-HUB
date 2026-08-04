@@ -1,0 +1,518 @@
+--[========================================================================]--
+--                    VAGRANT PRO ARCHITECTURE SYSTEM                        --
+--                        Advanced Combat Suite v4.1                         --
+--[========================================================================]--
+
+local VagrantSystem = {}
+VagrantSystem.__index = VagrantSystem
+
+-- // Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local Workspace = game:GetService("Workspace")
+
+-- // Core Environment
+local LocalPlayer = Players.LocalPlayer
+local CurrentCamera = Workspace.CurrentCamera
+
+-- // Configuration Profile
+VagrantSystem.Config = {
+    Aimbot = {
+        Enabled = false,
+        FOV = 120,
+        FOV_OffsetY = -55,
+        WallCheck = true,
+        TeamCheck = true,
+        SnapFactor = 0.90 -- ความดูด 90%
+    },
+    Visuals = {
+        ESPBox = true,
+        HideDistance = 5,
+        ShowFPS = true
+    },
+    Utility = {
+        SpeedEnabled = false,
+        WalkSpeed = 24
+    }
+}
+
+-- // Runtime State Management
+VagrantSystem.State = {
+    ActiveDrawings = {},
+    LockedTarget = nil,
+    FPS = {
+        LastTick = tick(),
+        Frames = 0,
+        Current = 0
+    },
+    GUI = {}
+}
+
+--[========================================================================]--
+--                        USER INTERFACE FACTORY                            --
+--[========================================================================]--
+
+function VagrantSystem:InitializeUI()
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "VagrantProFramework"
+    ScreenGui.ResetOnSpawn = false
+    
+    pcall(function()
+        ScreenGui.Parent = CoreGui
+    end)
+    if not ScreenGui.Parent then
+        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+    end
+    self.State.GUI.ScreenGui = ScreenGui
+
+    -- FOV Render Ring
+    local FOVFrame = Instance.new("Frame", ScreenGui)
+    FOVFrame.Name = "FOVCircle"
+    FOVFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    FOVFrame.BackgroundTransparency = 1
+    
+    local FOVStroke = Instance.new("UIStroke", FOVFrame)
+    FOVStroke.Thickness = 1.5
+    FOVStroke.Transparency = 0.3
+    
+    local FOVCorners = Instance.new("UICorner", FOVFrame)
+    FOVCorners.CornerRadius = UDim.new(1, 0)
+    self.State.GUI.FOVFrame = FOVFrame
+    self.State.GUI.FOVStroke = FOVStroke
+
+    -- Floating Icon (Monkey)
+    local ToggleButton = Instance.new("ImageButton", ScreenGui)
+    ToggleButton.Name = "ToggleMenuBtn"
+    ToggleButton.Size = UDim2.new(0, 50, 0, 50)
+    ToggleButton.Position = UDim2.new(0.05, 0, 0.2, 0)
+    ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+    ToggleButton.Image = "rbxassetid://6031094678"
+    Instance.new("UICorner", ToggleButton).CornerRadius = UDim.new(1, 0)
+
+    -- Main Container Window
+    local MainFrame = Instance.new("Frame", ScreenGui)
+    MainFrame.Name = "MainContainer"
+    MainFrame.Size = UDim2.new(0, 210, 0, 360)
+    MainFrame.Position = UDim2.new(0.15, 0, 0.1, 0)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+    MainFrame.Visible = false
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 8)
+    self.State.GUI.MainFrame = MainFrame
+
+    -- Header Bar
+    local TitleLabel = Instance.new("TextLabel", MainFrame)
+    TitleLabel.Size = UDim2.new(1, 0, 0, 30)
+    TitleLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    TitleLabel.Text = " VAGRANT PRO SYSTEM"
+    TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    TitleLabel.TextSize = 12
+    TitleLabel.Font = Enum.Font.SourceSansBold
+    TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    Instance.new("UICorner", TitleLabel).CornerRadius = UDim.new(0, 8)
+
+    -- สร้างปุ่ม Toggles หลัก
+    self:CreateToggleBtn(MainFrame, "Aimbot Head (Soft)", 36, self.Config.Aimbot, "Enabled")
+    self:CreateToggleBtn(MainFrame, "ESP Box & HP", 68, self.Config.Visuals, "ESPBox")
+    self:CreateToggleBtn(MainFrame, "Wall Check", 100, self.Config.Aimbot, "WallCheck")
+    self:CreateToggleBtn(MainFrame, "Team Check", 132, self.Config.Aimbot, "TeamCheck")
+    self:CreateToggleBtn(MainFrame, "Speed Hack", 164, self.Config.Utility, "SpeedEnabled")
+    self:CreateToggleBtn(MainFrame, "Show FPS", 196, self.Config.Visuals, "ShowFPS")
+
+    -- ส่วนปุ่มปรับค่า WalkSpeed
+    self:CreateSliderSection(MainFrame, "WalkSpeed: " .. self.Config.Utility.WalkSpeed, 230, function(isPlus)
+        if isPlus then
+            self.Config.Utility.WalkSpeed = math.clamp(self.Config.Utility.WalkSpeed + 2, 16, 100)
+        else
+            self.Config.Utility.WalkSpeed = math.clamp(self.Config.Utility.WalkSpeed - 2, 16, 100)
+        end
+        return "WalkSpeed: " .. self.Config.Utility.WalkSpeed
+    end)
+
+    -- ส่วนปุ่มปรับขนาด FOV
+    self:CreateSliderSection(MainFrame, "FOV Size: " .. self.Config.Aimbot.FOV, 286, function(isPlus)
+        if isPlus then
+            self.Config.Aimbot.FOV = math.clamp(self.Config.Aimbot.FOV + 10, 20, 400)
+        else
+            self.Config.Aimbot.FOV = math.clamp(self.Config.Aimbot.FOV - 10, 20, 400)
+        end
+        return "FOV Size: " .. self.Config.Aimbot.FOV
+    end)
+
+    -- Event Bindings สำหรับเปิด-ปิดเมนู
+    ToggleButton.MouseButton1Click:Connect(function()
+        MainFrame.Visible = not MainFrame.Visible
+    end)
+
+    self:SetupWindowDragging(ToggleButton, MainFrame, TitleLabel)
+end
+
+function VagrantSystem:CreateToggleBtn(parent, name, posY, targetTable, key, callback)
+    local btn = Instance.new("TextButton", parent)
+    btn.Size = UDim2.new(0, 190, 0, 28)
+    btn.Position = UDim2.new(0, 10, 0, posY)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.Text = name .. (targetTable[key] and ": ON" or ": OFF")
+    btn.TextColor3 = targetTable[key] and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+    btn.TextSize = 12
+    btn.Font = Enum.Font.SourceSansBold
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 5)
+
+    btn.MouseButton1Click:Connect(function()
+        targetTable[key] = not targetTable[key]
+        local state = targetTable[key]
+        btn.Text = name .. (state and ": ON" or ": OFF")
+        btn.TextColor3 = state and Color3.fromRGB(0, 255, 0) or Color3.fromRGB(255, 0, 0)
+        if callback then callback(state) end
+    end)
+end
+
+function VagrantSystem:CreateSliderSection(parent, labelText, posY, callback)
+    local label = Instance.new("TextLabel", parent)
+    label.Size = UDim2.new(0, 190, 0, 16)
+    label.Position = UDim2.new(0, 10, 0, posY)
+    label.BackgroundTransparency = 1
+    label.Text = labelText
+    label.TextColor3 = Color3.fromRGB(255, 255, 255)
+    label.TextSize = 11
+    label.Font = Enum.Font.SourceSansBold
+    label.TextXAlignment = Enum.TextXAlignment.Left
+
+    local btnMinus = Instance.new("TextButton", parent)
+    btnMinus.Size = UDim2.new(0, 92, 0, 18)
+    btnMinus.Position = UDim2.new(0, 10, 0, posY + 18)
+    btnMinus.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btnMinus.Text = "-"
+    btnMinus.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btnMinus.TextSize = 11
+    btnMinus.Font = Enum.Font.SourceSansBold
+    Instance.new("UICorner", btnMinus).CornerRadius = UDim.new(0, 4)
+
+    local btnPlus = Instance.new("TextButton", parent)
+    btnPlus.Size = UDim2.new(0, 92, 0, 18)
+    btnPlus.Position = UDim2.new(0, 108, 0, posY + 18)
+    btnPlus.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    btnPlus.Text = "+"
+    btnPlus.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btnPlus.TextSize = 11
+    btnPlus.Font = Enum.Font.SourceSansBold
+    Instance.new("UICorner", btnPlus).CornerRadius = UDim.new(0, 4)
+
+    btnMinus.MouseButton1Click:Connect(function()
+        label.Text = callback(false)
+    end)
+    btnPlus.MouseButton1Click:Connect(function()
+        label.Text = callback(true)
+    end)
+end
+
+function VagrantSystem:SetupWindowDragging(button, frame, header)
+    local draggingBtn, dragInputBtn, dragStartBtn, startPosBtn
+    button.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingBtn = true
+            dragStartBtn = input.Position
+            startPosBtn = button.Position
+        end
+    end)
+    button.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragInputBtn = input
+        end
+    end)
+
+    local draggingFrame, dragInputFrame, dragStartFrame, startPosFrame
+    header.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingFrame = true
+            dragStartFrame = input.Position
+            startPosFrame = frame.Position
+        end
+    end)
+    header.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragInputFrame = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInputBtn and draggingBtn then
+            local delta = input.Position - dragStartBtn
+            button.Position = UDim2.new(startPosBtn.X.Scale, startPosBtn.X.Offset + delta.X, startPosBtn.Y.Scale, startPosBtn.Y.Offset + delta.Y)
+        end
+        if input == dragInputFrame and draggingFrame then
+            local delta = input.Position - dragStartFrame
+            frame.Position = UDim2.new(startPosFrame.X.Scale, startPosFrame.X.Offset + delta.X, startPosFrame.Y.Scale, startPosFrame.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+--[========================================================================]--
+--                       COMBAT & VISUAL MODULES                            --
+--[========================================================================]--
+
+function VagrantSystem:CreateESP(player)
+    if player == LocalPlayer then return end
+    
+    local box = Drawing.new("Square")
+    box.Visible = false
+    box.Color = Color3.fromRGB(255, 255, 255)
+    box.Thickness = 1.5
+    box.Filled = false
+
+    local healthBg = Drawing.new("Square")
+    healthBg.Visible = false
+    healthBg.Color = Color3.fromRGB(30, 30, 30)
+    healthBg.Thickness = 1
+    healthBg.Filled = true
+
+    local healthBar = Drawing.new("Square")
+    healthBar.Visible = false
+    healthBar.Color = Color3.fromRGB(0, 255, 0)
+    healthBar.Thickness = 1
+    healthBar.Filled = true
+
+    local healthText = Drawing.new("Text")
+    healthText.Visible = false
+    healthText.Color = Color3.fromRGB(255, 255, 255)
+    healthText.Size = 11
+    healthText.Center = true
+    healthText.Outline = true
+
+    self.State.ActiveDrawings[player] = {Box = box, HealthBg = healthBg, HealthBar = healthBar, HealthText = healthText}
+end
+
+function VagrantSystem:RemoveESP(player)
+    if self.State.ActiveDrawings[player] then
+        pcall(function()
+            self.State.ActiveDrawings[player].Box:Remove()
+            self.State.ActiveDrawings[player].HealthBg:Remove()
+            self.State.ActiveDrawings[player].HealthBar:Remove()
+            self.State.ActiveDrawings[player].HealthText:Remove()
+        end)
+        self.State.ActiveDrawings[player] = nil
+    end
+end
+
+function VagrantSystem:IsTeamMate(player)
+    if not self.Config.Aimbot.TeamCheck then return false end
+    if player.Team and LocalPlayer.Team and player.Team == LocalPlayer.Team then
+        return true
+    end
+    return false
+end
+
+function VagrantSystem:IsVisible(targetPart)
+    if not self.Config.Aimbot.WallCheck then return true end
+    local origin = CurrentCamera.CFrame.Position
+    local direction = targetPart.Position - origin
+    
+    local raycastParams = RaycastParams.new()
+    raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+    local filterInstances = {CurrentCamera}
+    if LocalPlayer.Character then
+        table.insert(filterInstances, LocalPlayer.Character)
+    end
+    raycastParams.FilterDescendantsInstances = filterInstances
+    raycastParams.IgnoreWater = true
+    
+    local result = Workspace:Raycast(origin, direction, raycastParams)
+    if result then
+        if result.Instance:IsDescendantOf(targetPart.Parent) then
+            return true
+        end
+        return false
+    end
+    return true
+end
+
+function VagrantSystem:GetClosestTarget()
+    local closestHead = nil
+    local shortestDistance = self.Config.Aimbot.FOV
+    local screenCenter = Vector2.new(CurrentCamera.ViewportSize.X / 2, (CurrentCamera.ViewportSize.Y / 2) + self.Config.Aimbot.FOV_OffsetY)
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character then
+            if not self:IsTeamMate(player) then
+                local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+                local head = player.Character:FindFirstChild("Head")
+
+                if humanoid and humanoid.Health > 0 and head then
+                    local screenPoint, onScreen = CurrentCamera:WorldToViewportPoint(head.Position)
+                    if onScreen then
+                        local screenPos2D = Vector2.new(screenPoint.X, screenPoint.Y)
+                        local distance = (screenPos2D - screenCenter).Magnitude
+
+                        if distance < shortestDistance then
+                            if self:IsVisible(head) then
+                                shortestDistance = distance
+                                closestHead = head
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closestHead
+end
+
+--[========================================================================]--
+--                     EXECUTION PIPELINE & RENDER                          --
+--[========================================================================]--
+
+function VagrantSystem:Run()
+    self:InitializeUI()
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        self:CreateESP(player)
+    end
+    Players.PlayerAdded:Connect(function(p) self:CreateESP(p) end)
+    Players.PlayerRemoving:Connect(function(p) self:RemoveESP(p) end)
+
+    local fpsText = Drawing.new("Text")
+    fpsText.Visible = true
+    fpsText.Size = 16
+    fpsText.Center = true -- จัดกึ่งกลางข้อความให้อัตโนมัติ
+    fpsText.Outline = true
+
+    RunService.RenderStepped:Connect(function(dt)
+        local rainbowColor = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+
+        -- FPS Pipeline (ย้ายมาไว้ตรงกลางด้านบนสุดของหน้าจอ ไม่ให้ทับปุ่ม Roblox)
+        if self.Config.Visuals.ShowFPS then
+            self.State.FPS.Frames = self.State.FPS.Frames + 1
+            local currentTime = tick()
+            if currentTime - self.State.FPS.LastTick >= 1 then
+                self.State.FPS.Current = math.floor(self.State.FPS.Frames / (currentTime - self.State.FPS.LastTick))
+                self.State.FPS.Frames = 0
+                self.State.FPS.LastTick = currentTime
+            end
+            fpsText.Text = "FPS: " .. self.State.FPS.Current
+            -- คำนวณตำแหน่ง X ให้อยู่กึ่งกลางหน้าจอพอดี และ Y อยู่ด้านบน (12 พิกเซลจากขอบบน)
+            fpsText.Position = Vector2.new(CurrentCamera.ViewportSize.X / 2, 12)
+            fpsText.Color = rainbowColor
+            fpsText.Visible = true
+        else
+            fpsText.Visible = false
+        end
+
+        -- FOV Update
+        local fovFrame = self.State.GUI.FOVFrame
+        fovFrame.Size = UDim2.new(0, self.Config.Aimbot.FOV * 2, 0, self.Config.Aimbot.FOV * 2)
+        fovFrame.Position = UDim2.new(0, CurrentCamera.ViewportSize.X / 2, 0, (CurrentCamera.ViewportSize.Y / 2) + self.Config.Aimbot.FOV_OffsetY)
+        self.State.GUI.FOVStroke.Color = rainbowColor
+        fovFrame.Visible = self.Config.Aimbot.Enabled
+
+        -- Speed Pipeline
+        local char = LocalPlayer.Character
+        if char and char:FindFirstChildOfClass("Humanoid") then
+            local humanoid = char:FindFirstChildOfClass("Humanoid")
+            if self.Config.Utility.SpeedEnabled then
+                humanoid.WalkSpeed = self.Config.Utility.WalkSpeed
+            else
+                humanoid.WalkSpeed = 16
+            end
+        end
+
+        -- Aimbot Pipeline
+        if self.Config.Aimbot.Enabled then
+            local currentTarget = self.State.LockedTarget
+            if not currentTarget or not currentTarget.Parent or not currentTarget.Parent:FindFirstChildOfClass("Humanoid") or currentTarget.Parent:FindFirstChildOfClass("Humanoid").Health <= 0 then
+                self.State.LockedTarget = nil
+            end
+
+            if not self.State.LockedTarget then
+                self.State.LockedTarget = self:GetClosestTarget()
+            end
+
+            local targetHead = self.State.LockedTarget
+            if targetHead and self:IsVisible(targetHead) then
+                local exactCFrame = CFrame.new(CurrentCamera.CFrame.Position, targetHead.Position)
+                CurrentCamera.CFrame = CurrentCamera.CFrame:Lerp(exactCFrame, self.Config.Aimbot.SnapFactor)
+            else
+                self.State.LockedTarget = nil
+            end
+        else
+            self.State.LockedTarget = nil
+        end
+
+        -- ESP Pipeline
+        local myRoot = char and char:FindFirstChild("HumanoidRootPart")
+        for player, drawings in pairs(self.State.ActiveDrawings) do
+            local targetChar = player.Character
+            local box = drawings.Box
+            local healthBg = drawings.HealthBg
+            local healthBar = drawings.HealthBar
+            local healthText = drawings.HealthText
+            
+            if self.Config.Visuals.ESPBox and targetChar and targetChar:FindFirstChild("Head") and targetChar:FindFirstChild("HumanoidRootPart") then
+                local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
+                local head = targetChar.Head
+                local rootPart = targetChar.HumanoidRootPart
+
+                if humanoid and humanoid.Health > 0 then
+                    local distance = myRoot and (myRoot.Position - rootPart.Position).Magnitude or 9999
+                    local topPos, topOnScreen = CurrentCamera:WorldToViewportPoint(head.Position + Vector3.new(0, 0.6, 0))
+                    local bottomPos, bottomOnScreen = CurrentCamera:WorldToViewportPoint(head.Position - Vector3.new(0, 0.6, 0))
+
+                    if topOnScreen or bottomOnScreen then
+                        local height = math.abs(topPos.Y - bottomPos.Y)
+                        local width = height
+                        local posX = topPos.X - width / 2
+                        local posY = topPos.Y
+
+                        box.Size = Vector2.new(width, height)
+                        box.Position = Vector2.new(posX, posY)
+                        box.Color = rainbowColor
+                        box.Visible = true
+
+                        if distance > self.Config.Visuals.HideDistance then
+                            local barWidth = 3
+                            local barHeight = height
+                            local barX = posX - barWidth - 4
+                            local barY = posY
+
+                            healthBg.Size = Vector2.new(barWidth, barHeight)
+                            healthBg.Position = Vector2.new(barX, barY)
+                            healthBg.Visible = true
+
+                            local healthPercent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                            local currentBarHeight = barHeight * healthPercent
+                            healthBar.Size = Vector2.new(barWidth, currentBarHeight)
+                            healthBar.Position = Vector2.new(barX, barY + (barHeight - currentBarHeight))
+                            healthBar.Visible = true
+
+                            healthText.Text = math.floor(humanoid.Health) .. " HP"
+                            healthText.Position = Vector2.new(topPos.X, posY - 15)
+                            healthText.Visible = true
+                        else
+                            healthBg.Visible = false
+                            healthBar.Visible = false
+                            healthText.Visible = false
+                        end
+                    else
+                        box.Visible = false
+                        healthBg.Visible = false
+                        healthBar.Visible = false
+                        healthText.Visible = false
+                    end
+                else
+                    box.Visible = false
+                    healthBg.Visible = false
+                    healthBar.Visible = false
+                    healthText.Visible = false
+                end
+            else
+                box.Visible = false
+                healthBg.Visible = false
+                healthBar.Visible = false
+                healthText.Visible = false
+            end
+        end
+    end)
+end
+
+-- Start Framework Execution
+VagrantSystem:Run()
